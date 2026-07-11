@@ -1,3 +1,5 @@
+# ORM
+
 import sqlite3
 
 
@@ -27,5 +29,31 @@ def createTable(conn):
     return True
 
 
-def insertData():
-    pass
+def insertData(conn, data):
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "INSERT INTO Tasks (title, desc, status) VALUES (?, ?, ?)", 
+        data
+    )
+    conn.commit()
+
+    return True
+
+
+def getData(conn):
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT title, desc FROM Tasks")
+    conn.commit()
+
+    rows = cursor.fetchall()
+    result = []
+
+    for row in rows:
+        result.append(list(row))
+
+    print(result)
+    return result
+
+

@@ -1,6 +1,6 @@
 import sys
 from PySide6 import QtCore, QtWidgets, QtGui
-from manageDb import createDb, createTable
+from manageDb import createDb, createTable, insertData, getData
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  TaskCard
@@ -217,9 +217,10 @@ class TaskCard(QtWidgets.QWidget):
 class MyWidget(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
-        connectionToDb = createDb()
-        createTable(connectionToDb)
-        self.tasks: list[tuple[str, str]] = []
+        self.connectionToDb = createDb()
+        createTable(self.connectionToDb)
+        self.tasks = getData(self.connectionToDb)
+        print("tasks", self.tasks)
         self._build_ui()
 
     def _build_ui(self):
@@ -335,6 +336,7 @@ class MyWidget(QtWidgets.QWidget):
 
         main_layout.addWidget(left_panel)
         main_layout.addWidget(scroll_area, 1)
+        self._rebuild_cards()
 
     # ── Slots ──────────────────────────────────────────────────────────────
 
@@ -343,7 +345,9 @@ class MyWidget(QtWidgets.QWidget):
         if not title:
             return                              # don't add blank cards
         desc = self.desc_input.toPlainText().strip()
-        self.tasks.append((title, desc))
+        
+        insertData(self.connectionToDb, (title, desc, "Pending"))
+        self.tasks=getData(self.connectionToDb)
         self.title_input.clear()
         self.desc_input.clear()
         self._rebuild_cards()
@@ -357,6 +361,7 @@ class MyWidget(QtWidgets.QWidget):
 
         # Insert cards before the stretch
         for title, desc in self.tasks:
+            print(title)
             card = TaskCard(title=title, desc=desc)
             self.right_layout.insertWidget(self.right_layout.count() - 1, card)
 
