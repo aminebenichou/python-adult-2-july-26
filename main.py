@@ -1,6 +1,154 @@
 import sys
 from PySide6 import QtCore, QtWidgets, QtGui
-from manageDb import createDb, createTable, insertData, getData
+from manageDb import createDb, createTable, insertData, getData, editRow
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  EditTaskDialog
+# ─────────────────────────────────────────────────────────────────────────────
+
+class EditTaskDialog(QtWidgets.QDialog):
+    def __init__(self, title: str, desc: str, status: str, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Edit Task")
+        self.setFixedSize(360, 360)
+        self.setStyleSheet("background-color: #1E1E2E;")
+        self._build_ui(title, desc, status)
+
+    def _build_ui(self, title: str, desc: str, status: str):
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+
+        heading = QtWidgets.QLabel("Edit Task")
+        heading.setStyleSheet("""
+            color: #EAEAF5;
+            font-family: "Segoe UI", sans-serif;
+            font-size: 15px;
+            font-weight: 700;
+            background: transparent;
+        """)
+
+        self.title_input = QtWidgets.QLineEdit(title)
+        self.title_input.setFixedHeight(36)
+
+        self.desc_input = QtWidgets.QTextEdit(desc)
+        self.desc_input.setFixedHeight(100)
+
+        self.status_input = QtWidgets.QComboBox()
+        self.status_input.addItem("· Pending", "Pending")
+        self.status_input.addItem("▶ In Progress", "In Progress")
+        self.status_input.addItem("✓ Completed", "Completed")
+        idx = self.status_input.findData(status)
+        self.status_input.setCurrentIndex(idx if idx >= 0 else 0)
+
+        field_style = """
+            QLineEdit, QTextEdit, QComboBox {
+                background-color: #2A2A3E;
+                color: #EAEAF5;
+                border: 1px solid #3D3D55;
+                border-radius: 8px;
+                padding: 6px 10px;
+                font-family: "Segoe UI", sans-serif;
+                font-size: 12px;
+            }
+            QLineEdit:focus, QTextEdit:focus, QComboBox:focus {
+                border-color: #7C6AF7;
+            }
+            QComboBox::drop-down { border: none; width: 24px; }
+            QComboBox QAbstractItemView {
+                background-color: #2A2A3E;
+                color: #EAEAF5;
+                border: 1px solid #3D3D55;
+                selection-background-color: #7C6AF7;
+                outline: none;
+            }
+        """
+        self.title_input.setStyleSheet(field_style)
+        self.desc_input.setStyleSheet(field_style)
+        self.status_input.setStyleSheet(field_style)
+
+        title_lbl = self._field_label("Title")
+        desc_lbl = self._field_label("Description")
+        status_lbl = self._field_label("Status")
+
+        btn_row = QtWidgets.QHBoxLayout()
+        btn_row.setSpacing(8)
+        btn_row.addStretch()
+
+        cancel_btn = QtWidgets.QPushButton("Cancel")
+        cancel_btn.setFixedSize(90, 34)
+        cancel_btn.clicked.connect(self.reject)
+        cancel_btn.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                color: #8888A8;
+                border: 1px solid #3D3D55;
+                border-radius: 8px;
+                font-family: "Segoe UI", sans-serif;
+                font-size: 12px;
+                font-weight: 600;
+            }
+            QPushButton:hover { border-color: #7C6AF7; color: #EAEAF5; }
+        """)
+
+        save_btn = QtWidgets.QPushButton("Save")
+        save_btn.setFixedSize(90, 34)
+        save_btn.setDefault(True)
+        save_btn.clicked.connect(self._on_save)
+        save_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #7C6AF7;
+                color: #EAEAF5;
+                border: none;
+                border-radius: 8px;
+                font-family: "Segoe UI", sans-serif;
+                font-size: 12px;
+                font-weight: 700;
+            }
+            QPushButton:hover { background-color: #8F7EFF; }
+            QPushButton:pressed { background-color: #6254D4; }
+        """)
+
+        btn_row.addWidget(cancel_btn)
+        btn_row.addWidget(save_btn)
+
+        layout.addWidget(heading)
+        layout.addWidget(title_lbl)
+        layout.addWidget(self.title_input)
+        layout.addWidget(desc_lbl)
+        layout.addWidget(self.desc_input)
+        layout.addWidget(status_lbl)
+        layout.addWidget(self.status_input)
+        layout.addStretch()
+        layout.addLayout(btn_row)
+
+    @staticmethod
+    def _field_label(text: str) -> QtWidgets.QLabel:
+        lbl = QtWidgets.QLabel(text)
+        lbl.setStyleSheet("""
+            color: #8888A8;
+            font-family: "Segoe UI", sans-serif;
+            font-size: 11px;
+            font-weight: 600;
+            background: transparent;
+        """)
+        return lbl
+
+    def _on_save(self):
+        if not self.title_input.text().strip():
+            self.title_input.setStyleSheet(
+                self.title_input.styleSheet() + "QLineEdit { border-color: #E05C6A; }"
+            )
+            return
+        self.accept()
+
+    def get_data(self) -> dict:
+        return {
+            "title": self.title_input.text().strip(),
+            "desc": self.desc_input.toPlainText().strip(),
+            "status": self.status_input.currentData(),
+        }
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  TaskCard
@@ -16,8 +164,14 @@ class TaskCard(QtWidgets.QWidget):
         Danger:   #E05C6A
     """
 
-    def __init__(self, title: str, desc: str = "", status: str = "todo", parent=None):
+    def __init__(self, task_id, title: str, desc: str = "", status: str = "Pending",
+                 conn=None, on_updated=None, parent=None):
         super().__init__(parent)
+        self.task_id = task_id
+        self.conn = conn
+        self.on_updated = on_updated
+        self._raw_desc = desc
+        self._status = status
         self._build_ui(title, desc, status)
 
     # ── Build ──────────────────────────────────────────────────────────────
@@ -55,8 +209,7 @@ class TaskCard(QtWidgets.QWidget):
         self.title_label.setObjectName("taskTitle")
         self.title_label.setWordWrap(True)
 
-        self.status_badge = QtWidgets.QLabel(self._badge_text(status))
-        self.status_badge.setObjectName(f"badge_{status}")
+        self.status_badge = QtWidgets.QLabel()
         self.status_badge.setFixedHeight(22)
         self.status_badge.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
 
@@ -83,6 +236,7 @@ class TaskCard(QtWidgets.QWidget):
         self.edit_btn = QtWidgets.QPushButton("Edit")
         self.edit_btn.setObjectName("editBtn")
         self.edit_btn.setFixedSize(72, 30)
+        self.edit_btn.clicked.connect(self.updateTask)
 
         self.delete_btn = QtWidgets.QPushButton("Delete")
         self.delete_btn.setObjectName("deleteBtn")
@@ -101,16 +255,33 @@ class TaskCard(QtWidgets.QWidget):
 
         root.addWidget(self.card)
         self._apply_styles()
+        self._set_status(status)
 
     # ── Helpers ────────────────────────────────────────────────────────────
 
     @staticmethod
     def _badge_text(status: str) -> str:
         return {
-            "todo":        "· To Do",
-            "in_progress": "▶ In Progress",
-            "done":        "✓ Done",
-        }.get(status, status.upper())
+            "Pending":     "· Pending",
+            "In Progress": "▶ In Progress",
+            "Completed":   "✓ Completed",
+        }.get(status, status.upper() if status else "UNKNOWN")
+
+    @staticmethod
+    def _badge_object_name(status: str) -> str:
+        return {
+            "Pending":     "badge_pending",
+            "In Progress": "badge_in_progress",
+            "Completed":   "badge_completed",
+        }.get(status, "badge_pending")
+
+    def _set_status(self, status: str):
+        self._status = status
+        self.status_badge.setText(self._badge_text(status))
+        self.status_badge.setObjectName(self._badge_object_name(status))
+        # re-polish so the new objectName's stylesheet rules apply
+        self.status_badge.style().unpolish(self.status_badge)
+        self.status_badge.style().polish(self.status_badge)
 
     def _apply_styles(self):
         # Apply to self so child objectNames are always in scope
@@ -150,7 +321,7 @@ class TaskCard(QtWidgets.QWidget):
                 color: #3D3D55;
                 max-height: 1px;
             }
-            QLabel#badge_todo {
+            QLabel#badge_pending {
                 color: #8888A8;
                 border: 1px solid #3D3D55;
                 border-radius: 10px;
@@ -168,7 +339,7 @@ class TaskCard(QtWidgets.QWidget):
                 font-weight: 600;
                 background: transparent;
             }
-            QLabel#badge_done {
+            QLabel#badge_completed {
                 color: #5EC887;
                 border: 1px solid #5EC887;
                 border-radius: 10px;
@@ -208,6 +379,19 @@ class TaskCard(QtWidgets.QWidget):
                 background-color: #B8404D;
             }
         """)
+
+    # ── Slots ──────────────────────────────────────────────────────────────
+
+    def updateTask(self):
+        dialog = EditTaskDialog(
+            self.title_label.text(), self._raw_desc, self._status, parent=self
+        )
+        if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
+            data = dialog.get_data()
+            if self.conn is not None:
+                editRow(self.conn, data, self.task_id)
+            if self.on_updated:
+                self.on_updated()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -345,11 +529,15 @@ class MyWidget(QtWidgets.QWidget):
         if not title:
             return                              # don't add blank cards
         desc = self.desc_input.toPlainText().strip()
-        
+
         insertData(self.connectionToDb, (title, desc, "Pending"))
-        self.tasks=getData(self.connectionToDb)
+        self.tasks = getData(self.connectionToDb)
         self.title_input.clear()
         self.desc_input.clear()
+        self._rebuild_cards()
+
+    def _on_task_updated(self):
+        self.tasks = getData(self.connectionToDb)
         self._rebuild_cards()
 
     def _rebuild_cards(self):
@@ -360,9 +548,16 @@ class MyWidget(QtWidgets.QWidget):
                 item.widget().deleteLater()
 
         # Insert cards before the stretch
-        for title, desc in self.tasks:
-            print(title)
-            card = TaskCard(title=title, desc=desc)
+        # getData() returns rows as (title, desc, id, status)
+        for title, desc, task_id, status in self.tasks:
+            card = TaskCard(
+                task_id=task_id,
+                title=title,
+                desc=desc,
+                status=status,
+                conn=self.connectionToDb,
+                on_updated=self._on_task_updated,
+            )
             self.right_layout.insertWidget(self.right_layout.count() - 1, card)
 
 

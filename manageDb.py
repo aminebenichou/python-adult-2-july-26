@@ -11,10 +11,9 @@ def createDb():
     return conn
 
 
-
 def createTable(conn):
     cursor = conn.cursor()
-    
+
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS Tasks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,7 +32,7 @@ def insertData(conn, data):
     cursor = conn.cursor()
 
     cursor.execute(
-        "INSERT INTO Tasks (title, desc, status) VALUES (?, ?, ?)", 
+        "INSERT INTO Tasks (title, desc, status) VALUES (?, ?, ?)",
         data
     )
     conn.commit()
@@ -44,7 +43,7 @@ def insertData(conn, data):
 def getData(conn):
     cursor = conn.cursor()
 
-    cursor.execute("SELECT title, desc FROM Tasks")
+    cursor.execute("SELECT title, desc, id, status FROM Tasks")
     conn.commit()
 
     rows = cursor.fetchall()
@@ -57,3 +56,13 @@ def getData(conn):
     return result
 
 
+def editRow(conn, updatedData, id):
+    cursor = conn.cursor()
+    print("Updating row...")
+    for k, v in updatedData.items():
+        cursor.execute(f"UPDATE Tasks SET {k} = ? WHERE id = ?", (v, id))
+        conn.commit()
+
+    print("Row updated")
+
+    return True
